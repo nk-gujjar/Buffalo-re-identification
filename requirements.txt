@@ -1,0 +1,8 @@
+tensorflow>=2.8.0
+keras>=2.8.0
+keras-cv-attention-models
+glob2
+pandas
+tqdm
+scikit-learn
+scikit-image
