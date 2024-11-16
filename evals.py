@@ -19,10 +19,32 @@ from sklearn.decomposition import PCA
 
 class eval_callback(tf.keras.callbacks.Callback):
     def __init__(self, basic_model, test_bin_file, batch_size=128, save_model=None, eval_freq=1, flip=True, PCA_acc=False):
+        # super(eval_callback, self).__init__()
+        # bins, issame_list = np.load(test_bin_file, encoding="bytes", allow_pickle=True)
+        # ds = tf.data.Dataset.from_tensor_slices(bins)
+        
+        # _imread = lambda xx: (tf.cast(tf.image.decode_image(xx, channels=3), "float32") - 127.5) * 0.0078125
+        # ds = ds.map(_imread)
+        # self.ds = ds.batch(batch_size)
+              # Assuming 'test_bin_file' contains the path to the binary file
         super(eval_callback, self).__init__()
-        bins, issame_list = np.load(test_bin_file, encoding="bytes", allow_pickle=True)
+
+        with open(test_bin_file, "rb") as f:
+           pairs = pickle.load(f)  # Load the saved pairs
+
+       # Unpack the pairs
+        bins = [(pair[0], pair[1]) for pair in pairs]  # Create a list of image pairs
+        issame_list = [pair[2] for pair in pairs]  # Create a list of labels
+        # # print("Bins content:", bins)  # Debugging line to check the content of bins
+        # bins, issame_list = np.load(test_bin_file, encoding="bytes", allow_pickle=True)
+        for path in bins:
+          if not os.path.exists(path):
+           print(f"File does not exist: {path}")
+       # Convert to tf.data.Dataset
+       
         ds = tf.data.Dataset.from_tensor_slices(bins)
-        # lambda xx: (tf.cast(tf.image.decode_image(tf.io.read_file(xx), channels=3), "float32") - 127.5) * 0.0078125
+
+        # Function to read images
         _imread = lambda xx: (tf.cast(tf.image.decode_image(xx, channels=3), "float32") - 127.5) * 0.0078125
         ds = ds.map(_imread)
         self.ds = ds.batch(batch_size)
@@ -303,4 +325,4 @@ elif __name__ == "__test__":
     from data_distiller import teacher_model_interf_wrapper
 
     mm = teacher_model_interf_wrapper("../models/GhostNet_x1.3_Arcface_Epoch_24.pth")
-    evals.eval_callback(lambda imm: mm(imm * 128 + 127.5), "/datasets/ms1m-retinaface-t1/agedb_30.bin").on_epoch_end()
+    evals.eval_callback(lambda imm: mm(imm * 128 + 127.5), "/datasets/_bin/dataset.bin").on_epoch_end()

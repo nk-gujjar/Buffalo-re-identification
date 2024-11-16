@@ -131,7 +131,12 @@ class Train:
             self.data_options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.DATA
         
         #Evaluate
-        my_evals = [evals.eval_callback(self.basic_model, ii, batch_size=self.batch_size_per_replica, eval_freq=eval_freq) for ii in eval_paths]
+        # Debugging: print to see eval_paths
+        print("Eval paths:", eval_paths)
+        for path in eval_paths:
+            print(f"Path: {path}, Type: {type(path)}")
+        my_evals = [evals.eval_callback(self.basic_model, ii, batch_size=self.batch_size_per_replica, eval_freq=eval_freq) for ii in eval_paths if isinstance(ii, str)]
+        # my_evals = [evals.eval_callback(self.basic_model, ii, batch_size=self.batch_size_per_replica, eval_freq=eval_freq) for ii in eval_paths if isinstance(ii, str)]
         if len(my_evals) != 0:
             my_evals[-1].save_model = os.path.splitext(save_path)[0]
         
