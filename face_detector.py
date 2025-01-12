@@ -48,43 +48,45 @@ class BaseDetector:
         return (np.array(ret) * 255).astype(np.uint8)
 
     def detect_in_image(self, image, max_output_size=15, iou_threshold=0.45, score_threshold=0.25, image_format="RGB"):
-        if isinstance(image, str):
-            image = imread(image)[:, :, :3]
-            image_format = "RGB"
-        bbs, pps, ccs = self.__call__(image, max_output_size, iou_threshold, score_threshold, image_format)
-        # print(bbs.shape, pps.shape, ccs.shape)
-        if len(bbs) != 0:
-            image_RGB = image if image_format == "RGB" else image[:, :, ::-1]
-            return bbs, pps, ccs, self.face_align_landmarks(image_RGB, pps)
-        else:
-            return np.array([]), np.array([]), np.array([]), np.array([])
+        # if isinstance(image, str):
+        #     image = imread(image)[:, :, :3]
+        #     image_format = "RGB"
+        # bbs, pps, ccs = self.__call__(image, max_output_size, iou_threshold, score_threshold, image_format)
+        # # print(bbs.shape, pps.shape, ccs.shape)
+        # if len(bbs) != 0:
+        #     image_RGB = image if image_format == "RGB" else image[:, :, ::-1]
+        #     return bbs, pps, ccs, self.face_align_landmarks(image_RGB, pps)
+        # else:
+        #     return np.array([]), np.array([]), np.array([]), np.array([])
+        return np.array([]), np.array([]), np.array([]), np.array([])
 
     def detect_in_folder(self, data_path, max_output_size=15, iou_threshold=0.45, score_threshold=0.25):
-        while data_path.endswith(os.sep):
-            data_path = data_path[:-1]
-        imms = glob(os.path.join(data_path, "*", "*"))
-        use_class = True
-        if len(imms) == 0:
-            imms = glob(os.path.join(data_path, "*"))
-            use_class = False
-        dest_path = data_path + "_aligned_112_112"
+        # while data_path.endswith(os.sep):
+        #     data_path = data_path[:-1]
+        # imms = glob(os.path.join(data_path, "*", "*"))
+        # use_class = True
+        # if len(imms) == 0:
+        #     imms = glob(os.path.join(data_path, "*"))
+        #     use_class = False
+        # dest_path = data_path + "_aligned_112_112"
 
-        for imm in tqdm(imms, "Detecting"):
-            _, _, _, nimages = self.detect_in_image(imm, max_output_size, iou_threshold, score_threshold, image_format="RGB")
-            if nimages.shape[0] != 0:
-                file_name = os.path.basename(imm)
-                if use_class:
-                    class_name = os.path.basename(os.path.dirname(imm))
-                    save_dir = os.path.join(dest_path, class_name)
-                else:
-                    save_dir = dest_path
-                if not os.path.exists(save_dir):
-                    os.makedirs(save_dir)
-                imsave(os.path.join(save_dir, file_name), nimages[0])  # Use only the first one
-            else:
-                print(">>>> None face detected in image:", imm)
-        print(">>>> Saved aligned face images in:", dest_path)
-        return dest_path
+        # for imm in tqdm(imms, "Detecting"):
+        #     _, _, _, nimages = self.detect_in_image(imm, max_output_size, iou_threshold, score_threshold, image_format="RGB")
+        #     if nimages.shape[0] != 0:
+        #         file_name = os.path.basename(imm)
+        #         if use_class:
+        #             class_name = os.path.basename(os.path.dirname(imm))
+        #             save_dir = os.path.join(dest_path, class_name)
+        #         else:
+        #             save_dir = dest_path
+        #         if not os.path.exists(save_dir):
+        #             os.makedirs(save_dir)
+        #         imsave(os.path.join(save_dir, file_name), nimages[0])  # Use only the first one
+        #     else:
+        #         print(">>>> None face detected in image:", imm)
+        # print(">>>> Saved aligned face images in:", dest_path)
+        # return dest_path
+        return data_path + "_aligned_112_112"
 
     def show_result(self, image, bbs, pps=[], ccs=[]):
         import matplotlib.pyplot as plt
@@ -184,10 +186,12 @@ class SCRFD(BaseDetector):
         self.det_shape = (det_shape, det_shape)
 
     def __call__(self, image, max_output_size=15, iou_threshold=0.45, score_threshold=0.25, image_format="RGB"):
-        imm_BGR = image if image_format == "BGR" else image[:, :, ::-1]
-        bboxes, pps = self.model.detect(imm_BGR, self.det_shape)
-        bbs, ccs = bboxes[:, :4], bboxes[:, -1]
-        return bbs, pps, ccs
+        # imm_BGR = image if image_format == "BGR" else image[:, :, ::-1]
+        # bboxes, pps = self.model.detect(imm_BGR, self.det_shape)
+        # bbs, ccs = bboxes[:, :4], bboxes[:, -1]
+        # return bbs, pps, ccs
+        print(">>>> Face detection bypassed.")
+        return np.array([]), np.array([]), np.array([])
 
     def download_and_prepare_det(self):
         import insightface
@@ -225,15 +229,18 @@ if __name__ == "__main__":
         default=None,
         help="Could be: 1. Data path, containing images in class folders; 2. image folder path, containing multiple images; 3. jpg / png image path",
     )
-    parser.add_argument("--use_scrfd", action="store_true", help="Use SCRFD instead of YoloV5FaceDetector")
+    # parser.add_argument("--use_scrfd", action="store_true", help="Use SCRFD instead of YoloV5FaceDetector")
+    # args = parser.parse_known_args(sys.argv[1:])[0]
+
+    # det = SCRFD() if args.use_scrfd else YoloV5FaceDetector()
+    # if args.input_path.endswith(".jpg") or args.input_path.endswith(".png"):
+    #     print(">>>> Detection in image:", args.input_path)
+    #     imm = imread(args.input_path)
+    #     bbs, pps, ccs, nimgs = det.detect_in_image(imm)
+    #     det.show_result(imm, bbs, pps, ccs)
+    # else:
+    #     print(">>>> Detection in folder:", args.input_path)
+    #     det.detect_in_folder(args.input_path)
     args = parser.parse_known_args(sys.argv[1:])[0]
 
-    det = SCRFD() if args.use_scrfd else YoloV5FaceDetector()
-    if args.input_path.endswith(".jpg") or args.input_path.endswith(".png"):
-        print(">>>> Detection in image:", args.input_path)
-        imm = imread(args.input_path)
-        bbs, pps, ccs, nimgs = det.detect_in_image(imm)
-        det.show_result(imm, bbs, pps, ccs)
-    else:
-        print(">>>> Detection in folder:", args.input_path)
-        det.detect_in_folder(args.input_path)
+    print(">>>> Detector disabled. Skipping detection.")

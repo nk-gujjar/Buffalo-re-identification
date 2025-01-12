@@ -8,6 +8,9 @@ import tensorflow as tf
 from tensorflow import keras
 import models
 
+from keras.optimizers import SGD  # Ensure this import is present
+
+
 # import multiprocessing as mp
 
 # if mp.get_start_method() != "forkserver":
@@ -29,6 +32,7 @@ class Train:
         basic_model=None,
         model=None,
         compile=True,
+        optimizer=None,
         output_weight_decay=1,  # L2 regularizer for output layer, 0 for None, >=1 for value in basic_model, (0, 1) for specific value
         custom_objects={},
         pretrained=None,  # If reload weights from another h5 file
@@ -38,6 +42,7 @@ class Train:
         lr_decay_steps=0,  # <=1 for Exponential, (1, 500) for Cosine decay on epoch, >= 500 for Cosine decay on batch, list for Constant
         lr_min=1e-6,
         lr_warmup_steps=0,
+        lr_scheduler=None,
         eval_freq=1,
         random_status=0,
         random_cutout_mask_area=0.0,  # ratio of randomly cutout bottom 2/5 area, regarding as ignoring mask area
@@ -49,6 +54,7 @@ class Train:
         sam_rho=0,
         vpl_start_iters=-1,  # Enable by setting value > 0, like 8000. https://openaccess.thecvf.com/content/CVPR2021/papers/Deng_Variational_Prototype_Learning_for_Deep_Face_Recognition_CVPR_2021_paper.pdf
         vpl_allowed_delta=200,
+        callbacks=[],
     ):
         from inspect import getmembers, isfunction, isclass
 
@@ -56,7 +62,14 @@ class Train:
         custom_objects.update({"NormDense": models.NormDense})
 
         self.model, self.basic_model, self.save_path, self.inited_from_model, self.sam_rho, self.pretrained = None, None, save_path, False, sam_rho, pretrained
-        self.vpl_start_iters, self.vpl_allowed_delta = vpl_start_iters, vpl_allowed_delta
+        self.model_checkpoint_weights = None
+        self.model_checkpoint_full = None
+        self.vpl_start_iters = vpl_start_iters
+        self.vpl_allowed_delta = vpl_allowed_delta
+        self.callbacks = []
+        self.lr_scheduler = None  # Initialize lr_scheduler to None
+        self.optimizer = optimizer
+
         
         #if model is not specified, try to reload model from checkpoints
         if model is None and basic_model is None:
@@ -131,25 +144,31 @@ class Train:
             self.data_options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.DATA
         
         #Evaluate
-        # Debugging: print to see eval_paths
-        print("Eval paths:", eval_paths)
-        for path in eval_paths:
-            print(f"Path: {path}, Type: {type(path)}")
-        my_evals = [evals.eval_callback(self.basic_model, ii, batch_size=self.batch_size_per_replica, eval_freq=eval_freq) for ii in eval_paths if isinstance(ii, str)]
-        # my_evals = [evals.eval_callback(self.basic_model, ii, batch_size=self.batch_size_per_replica, eval_freq=eval_freq) for ii in eval_paths if isinstance(ii, str)]
+        my_evals = [evals.eval_callback(self.basic_model, ii, batch_size=self.batch_size_per_replica, eval_freq=eval_freq) for ii in eval_paths]
         if len(my_evals) != 0:
             my_evals[-1].save_model = os.path.splitext(save_path)[0]
         
         #
-        self.my_history, self.model_checkpoint, self.lr_scheduler, self.gently_stop = myCallbacks.basic_callbacks(
-            save_path,
-            my_evals,
-            lr=lr_base,
-            lr_decay=lr_decay,
-            lr_min=lr_min,
-            lr_decay_steps=lr_decay_steps,
-            lr_warmup_steps=lr_warmup_steps,
-        )
+        # self.my_history, self.model_checkpoint, self.lr_scheduler, self.gently_stop = myCallbacks.basic_callbacks(
+        #     save_path,
+        #     my_evals,
+        #     lr=lr_base,
+        #     lr_decay=lr_decay,
+        #     lr_min=lr_min,
+        #     lr_decay_steps=lr_decay_steps,
+        #     lr_warmup_steps=lr_warmup_steps,
+        # )
+        self.my_history, self.model_checkpoint_weights, self.model_checkpoint, self.lr_scheduler, self.gently_stop = myCallbacks.basic_callbacks(
+             save_path,
+             my_evals,
+             lr=lr_base,
+             lr_decay=lr_decay,
+             lr_min=lr_min,
+             lr_decay_steps=lr_decay_steps,
+             lr_warmup_steps=lr_warmup_steps,
+          )
+
+
         self.gently_stop = None  # may not working for windows
         self.my_evals, self.custom_callbacks = my_evals, []
         self.metrics = ["accuracy"]
@@ -157,7 +176,8 @@ class Train:
 
         self.data_path, self.random_status, self.image_per_class, self.mixup_alpha = data_path, random_status, image_per_class, mixup_alpha
         self.random_cutout_mask_area, self.partial_fc_split, self.samples_per_mining = random_cutout_mask_area, partial_fc_split, samples_per_mining
-        self.train_ds, self.steps_per_epoch, self.classes, self.is_triplet_dataset = None, None, 0, False
+        self.steps_per_epoch, self.classes, self.is_triplet_dataset = None, 0, False
+        self.train_ds = None
         self.teacher_model_interf, self.is_distill_ds = teacher_model_interf, False
         self.distill_emb_map_layer = None
 
@@ -397,7 +417,17 @@ class Train:
         return emb_loss_names, emb_loss_weights
 
     def __basic_train__(self, epochs, initial_epoch=0):
-        self.model.compile(optimizer=self.optimizer, loss=self.cur_loss, metrics=self.metrics, loss_weights=self.loss_weights)
+        self.model.compile(optimizer=self.optimizer, loss=self.cur_loss, metrics=self.metrics, loss_weights=1.0)
+         # Update callback if needed
+        # Update the callbacks with the new model checkpoint and learning rate scheduler
+        self.callbacks = [
+          self.model_checkpoint_weights,
+          self.model_checkpoint_full,
+          self.lr_scheduler,
+          self.gently_stop,
+        # Add any other callbacks you need here
+    ]
+        self.callbacks = [cb for cb in self.callbacks if cb is not None]
         self.model.fit(
             self.train_ds,
             epochs=epochs,
@@ -406,8 +436,8 @@ class Train:
             initial_epoch=initial_epoch,
             steps_per_epoch=self.steps_per_epoch,
             # steps_per_epoch=0,
-            use_multiprocessing=True,
-            workers=4,
+            # use_multiprocessing=True,
+            # workers=4,
         )
 
     def reset_dataset(self, data_path=None):
@@ -451,15 +481,19 @@ class Train:
             if self.model is not None:
                 self.model.stop_training = True
             return
+        
+        if self.lr_scheduler:
+            self.is_lr_on_batch = isinstance(self.lr_scheduler, myCallbacks.CosineLrScheduler)
+            if self.is_lr_on_batch:
+               self.lr_scheduler.steps_per_epoch = self.steps_per_epoch
+        else:
+            self.is_lr_on_batch = False
 
-        self.is_lr_on_batch = isinstance(self.lr_scheduler, myCallbacks.CosineLrScheduler)
-        if self.is_lr_on_batch:
-            self.lr_scheduler.steps_per_epoch = self.steps_per_epoch
 
         basic_callbacks = [ii for ii in [self.my_history, self.model_checkpoint, self.lr_scheduler] if ii is not None]
         self.callbacks = self.my_evals + self.custom_callbacks + basic_callbacks
         # self.basic_model.trainable = True
-        self.__init_optimizer__(optimizer)
+   
         if not self.inited_from_model:
             header_append_norm = isinstance(loss, losses.MagFaceLoss) or isinstance(loss, losses.AdaFaceLoss)
             self.__init_model__(type, lossTopK, header_append_norm)
@@ -517,6 +551,9 @@ class Train:
         self.basic_model.save(latest_save_path)
 
     def train(self, train_schedule, initial_epoch=0):
+        if "optimizer" in train_schedule[0]:  # Check if the optimizer is defined in the schedule
+           self.optimizer = train_schedule[0]["optimizer"]
+    
         train_schedule = [train_schedule] if isinstance(train_schedule, dict) else train_schedule
         for sch in train_schedule:
             for ii in ["centerloss", "triplet", "distill"]:
@@ -525,6 +562,11 @@ class Train:
                     sch.setdefault("embLossWeights", []).append(sch.pop(ii))
             if "alpha" in sch:
                 sch["tripletAlpha"] = sch.pop("alpha")
+
+            if "lr_scheduler" in sch:
+                self.lr_scheduler = sch["lr_scheduler"]
+            else:
+                self.lr_scheduler = None
 
             self.train_single_scheduler(**sch, initial_epoch=initial_epoch)
             initial_epoch += 0 if sch.get("bottleneckOnly", False) else sch["epoch"]

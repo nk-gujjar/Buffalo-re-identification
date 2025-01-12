@@ -9,6 +9,9 @@ from tensorflow import keras
 from tensorflow.keras.callbacks import ModelCheckpoint, ReduceLROnPlateau, LearningRateScheduler
 from tensorflow.python.keras import backend as K
 from tensorflow.python.keras.utils import losses_utils
+import numpy as np
+np.Inf = np.inf
+
 
 
 class Gently_stop_callback(keras.callbacks.Callback):
@@ -253,26 +256,84 @@ def constant_scheduler(epoch, lr_base, lr_decay_steps, decay_rate=0.1, warmup_st
     return lr
 
 
-def basic_callbacks(checkpoint="keras_checkpoints.h5", evals=[], lr=0.001, lr_decay=0.05, lr_min=0, lr_decay_steps=0, lr_warmup_steps=0):
+# def basic_callbacks(checkpoint="keras_checkpoints.h5", evals=[], lr=0.001, lr_decay=0.05, lr_min=0, lr_decay_steps=0, lr_warmup_steps=0):
+#     checkpoint_base = "checkpoints"
+#     if not os.path.exists(checkpoint_base):
+#         os.mkdir(checkpoint_base)
+#     checkpoint = os.path.join(checkpoint_base, checkpoint)
+#     model_checkpoint = ModelCheckpoint(checkpoint, verbose=1, save_weights_only=True)
+#     # model_checkpoint = ModelCheckpoint(checkpoint, verbose=1)
+#     model_checkpoint = ModelCheckpoint(os.path.splitext(checkpoint)[0] + "_epoch{epoch:02d}.h5", verbose=1)
+#     # model_checkpoint = ModelCheckpoint(os.path.splitext(checkpoint)[0] + "_epoch{epoch:02d}.keras", verbose=1)
+
+#     # model_checkpoint = keras.callbacks.experimental.BackupAndRestore(checkpoint_base)
+
+#     if isinstance(lr_decay_steps, list):
+#         # Constant decay on epoch
+#         lr_scheduler = LearningRateScheduler(lambda epoch: constant_scheduler(epoch, lr, lr_decay_steps, lr_decay, lr_warmup_steps))
+#     elif lr_decay_steps > 1:
+#         # Cosine decay on epoch / batch
+#         lr_scheduler = CosineLrScheduler(lr, first_restart_step=lr_decay_steps, m_mul=lr_decay, lr_min=lr_min, lr_warmup=lr_min, warmup_steps=lr_warmup_steps)
+#     else:
+#         # Exponential decay
+#         lr_scheduler = LearningRateScheduler(lambda epoch: exp_scheduler(epoch, lr, lr_decay, lr_min, warmup_steps=lr_warmup_steps))
+#     my_history = My_history(os.path.splitext(checkpoint)[0] + "_hist.json", evals=evals)
+#     history_logger = keras.callbacks.CSVLogger('log.csv', separator = ',', append = True)
+#     # tensor_board_log = keras.callbacks.TensorBoard(log_dir=os.path.splitext(checkpoint)[0] + '_logs')
+#     return [my_history, model_checkpoint, lr_scheduler, Gently_stop_callback()]
+def basic_callbacks(
+    checkpoint="keras_checkpoints.h5",
+    evals=[],
+    lr=0.001,
+    lr_decay=0.05,
+    lr_min=0,
+    lr_decay_steps=0,
+    lr_warmup_steps=0
+):
     checkpoint_base = "checkpoints"
     if not os.path.exists(checkpoint_base):
         os.mkdir(checkpoint_base)
-    checkpoint = os.path.join(checkpoint_base, checkpoint)
-    model_checkpoint = ModelCheckpoint(checkpoint, verbose=1, save_weights_only=True)
-    # model_checkpoint = ModelCheckpoint(checkpoint, verbose=1)
-    model_checkpoint = ModelCheckpoint(os.path.splitext(checkpoint)[0] + "_epoch{epoch:02d}.h5", verbose=1)
-    # model_checkpoint = keras.callbacks.experimental.BackupAndRestore(checkpoint_base)
 
+    # Define the checkpoint path
+    checkpoint_path = os.path.join(checkpoint_base, checkpoint)
+
+    # Model checkpoint for saving weights only
+    model_checkpoint_weights = ModelCheckpoint(
+        os.path.splitext(checkpoint_path)[0] + ".weights.h5",  # Change to .weights.h5 for weights
+        verbose=1,
+        save_weights_only=True
+    )
+
+    # Model checkpoint for saving the full model
+    model_checkpoint_full = ModelCheckpoint(
+        os.path.splitext(checkpoint_path)[0] + "_epoch{epoch:02d}.keras",  # Change to .keras for full model
+        verbose=1,
+        save_weights_only=False  # Set to False to save the full model
+    )
+
+    # Learning rate scheduling
     if isinstance(lr_decay_steps, list):
-        # Constant decay on epoch
-        lr_scheduler = LearningRateScheduler(lambda epoch: constant_scheduler(epoch, lr, lr_decay_steps, lr_decay, lr_warmup_steps))
+        lr_scheduler = LearningRateScheduler(
+            lambda epoch: constant_scheduler(epoch, lr, lr_decay_steps, lr_decay, lr_warmup_steps)
+        )
     elif lr_decay_steps > 1:
-        # Cosine decay on epoch / batch
-        lr_scheduler = CosineLrScheduler(lr, first_restart_step=lr_decay_steps, m_mul=lr_decay, lr_min=lr_min, lr_warmup=lr_min, warmup_steps=lr_warmup_steps)
+        lr_scheduler = CosineLrScheduler(
+            lr,
+            first_restart_step=lr_decay_steps,
+            m_mul=lr_decay,
+            lr_min=lr_min,
+            lr_warmup=lr_min,
+            warmup_steps=lr_warmup_steps
+        )
     else:
-        # Exponential decay
-        lr_scheduler = LearningRateScheduler(lambda epoch: exp_scheduler(epoch, lr, lr_decay, lr_min, warmup_steps=lr_warmup_steps))
-    my_history = My_history(os.path.splitext(checkpoint)[0] + "_hist.json", evals=evals)
-    history_logger = keras.callbacks.CSVLogger('log.csv', separator = ',', append = True)
-    # tensor_board_log = keras.callbacks.TensorBoard(log_dir=os.path.splitext(checkpoint)[0] + '_logs')
-    return [my_history, model_checkpoint, lr_scheduler, Gently_stop_callback()]
+        lr_scheduler = LearningRateScheduler(
+            lambda epoch: exp_scheduler(epoch, lr, lr_decay, lr_min, warmup_steps=lr_warmup_steps)
+        )
+
+    my_history = My_history(os.path.splitext(checkpoint_path)[0] + "_hist.json", evals=evals)
+    history_logger = keras.callbacks.CSVLogger('log.csv', separator=',', append=True)
+
+    # Return all necessary callbacks, including weights and full model checkpoints
+    return [my_history, model_checkpoint_weights, model_checkpoint_full, lr_scheduler, Gently_stop_callback()]
+
+

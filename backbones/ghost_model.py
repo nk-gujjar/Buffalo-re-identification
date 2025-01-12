@@ -203,7 +203,7 @@ def GhostNet(input_shape=(224, 224, 3), include_top=True, classes=0, width=1.3, 
 
         #Removes dimensions of size 1 from the shape of a tensor. (removes redundant axis (maybe None))
         #tf.squeeze(input, axis=None, name=None)
-        nn = K.squeeze(nn, 1)
+        # nn = K.squeeze(nn, 1)
         #Last layer's activation is softmax
         nn = Activation("softmax")(nn)
 
