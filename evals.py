@@ -20,22 +20,48 @@ from sklearn.decomposition import PCA
 class eval_callback(tf.keras.callbacks.Callback):
     def __init__(self, basic_model, test_bin_file, batch_size=128, save_model=None, eval_freq=1, flip=True, PCA_acc=False):
         super(eval_callback, self).__init__()
-        # bins, issame_list = np.load(test_bin_file, encoding="bytes", allow_pickle=True)
-        data = np.load(test_bin_file, encoding="bytes", allow_pickle=True)
-        bins, issame_list = data[0], data[1]
-        issame_list = [item for item in issame_list if isinstance(item, bool)]
-        print("Shape of bins:", np.shape(bins))
-        print("First few elements in bins:", bins[:5])
-        # Filter bins to only include image paths (strings)
-        bins = [item for item in bins if isinstance(item, str)]
-        if len(bins) > 0:
-          ds = tf.data.Dataset.from_tensor_slices(bins)
-        else:
-          print("Error: `bins` is empty.")
-        # ds = tf.data.Dataset.from_tensor_slices(bins)
-        # lambda xx: (tf.cast(tf.image.decode_image(tf.io.read_file(xx), channels=3), "float32") - 127.5) * 0.0078125
-        _imread = lambda xx: (tf.cast(tf.image.decode_image(xx, channels=3), "float32") - 127.5) * 0.0078125
-        ds = ds.map(_imread)
+#  #start   
+
+
+
+
+        data1 = np.load(test_bin_file, encoding="bytes", allow_pickle=True)
+        # print(data1[:2])
+        # print(data1[1][2])
+        # # print(data1.shape)  # Check the shape of data1
+        # print(data1[1])     # Check what the second element looks like
+
+
+        # data1 = np.array(data1)
+        bins = [item[:2] for item in data1]
+        issame_list = [item[2] for item in data1]
+        # print(bins[:5])
+        # print(issame_list[:5])
+
+
+        
+        def _imread(file_path):
+          image = tf.io.read_file(file_path)
+          image = tf.image.decode_jpeg(image, channels=3)  # You can also use `decode_png` if images are PNG
+          image = tf.cast(image, tf.float32)
+          image = (image - 127.5) * 0.0078125  # Normalize the image
+          return image
+        
+        ds = tf.data.Dataset.from_tensor_slices(bins)
+        ds = ds.map(lambda x: (_imread(x[0]), _imread(x[1])))
+
+        # Repeat dataset indefinitely (if needed)
+        ds = ds.repeat()  # Repeat indefinitely
+        
+        ds = ds.shuffle(buffer_size=len(bins))  # Shuffle data
+        ds = ds.prefetch(tf.data.experimental.AUTOTUNE)  # Prefetch for performance
+
+
+
+
+
+#   end
+
         self.ds = ds.batch(batch_size)
         self.test_issame = np.array(issame_list).astype("bool")
         self.test_names = os.path.splitext(os.path.basename(test_bin_file))[0]
