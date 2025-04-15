@@ -22,7 +22,7 @@ To ensure balance, **data augmentation** techniques were applied for proper dist
 ## Performance Metrics
 Below is the graph representing **Training Loss, Validation Loss, and Validation Accuracy** over the epochs:
 
-![Training Graph](#)
+![Training Graph](./loss-graph.png)
 
 ## Installation & Usage
 ### Prerequisites
