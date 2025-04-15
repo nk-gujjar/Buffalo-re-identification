@@ -1,2 +1,5 @@
 /datasets/dataset
 README.md
+/__pycache__/
+/.ipynb_checkpoints
+/.env
