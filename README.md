@@ -43,4 +43,4 @@ Each approach has its own folder with a `README.md` file explaining how to insta
 
 ---
 
-For any queries or collaboration requests, feel free to reach out to the authors.
+For any queries or collaboration requests, feel free to reach out to the me.
